@@ -114,6 +114,7 @@ dependencies {
 	implementation(libs.loader)
 
 	implementation(libs.halplibe)
+	include(libs.halplibe)
 	implementation(libs.modMenu)
 	implementation(libs.legacyLwjgl)
 

@@ -8,8 +8,9 @@
 		"colin"
 	],
 	"contact": {
-		"homepage": "",
-		"sources": ""
+		"homepage": "https://github.com/colinthepwner/cathode-bta",
+		"sources": "https://github.com/colinthepwner/cathode-bta",
+		"issues": "https://github.com/colinthepwner/cathode-bta/issues"
 	},
 	"license": "MIT",
 	"icon": "assets/btemu/icon.png",

@@ -5,7 +5,6 @@ A Better Than Adventure mod that adds monitors and speakers. Put monitors togeth
 ## Requirements
 
 - Babric
-- Halplibe
 
 ## Building
 
