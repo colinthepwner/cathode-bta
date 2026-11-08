@@ -1,0 +1,70 @@
+package org.cef.misc;
+
+/**
+ * Maps CEF's {@code cef_cursor_type_t} to SDL system cursors
+ * ({@code SDL_SystemCursor}, see {@code org.lwjgl.sdl.SDLMouse}).
+ * <p>
+ * The declaration order must match {@code cef_cursor_type_t} exactly,
+ * because {@link #fromId(int)} resolves by ordinal.
+ */
+public enum CefCursorType {
+	POINTER(0), // SDL_SYSTEM_CURSOR_DEFAULT
+	CROSS(3), // SDL_SYSTEM_CURSOR_CROSSHAIR
+	HAND(11), // SDL_SYSTEM_CURSOR_POINTER
+	IBEAM(1), // SDL_SYSTEM_CURSOR_TEXT
+	WAIT(2), // SDL_SYSTEM_CURSOR_WAIT
+	HELP(-1),
+	EAST_RESIZE(15), // SDL_SYSTEM_CURSOR_E_RESIZE
+	NORTH_RESIZE(13), // SDL_SYSTEM_CURSOR_N_RESIZE
+	NORTH_EAST_RESIZE(14), // SDL_SYSTEM_CURSOR_NE_RESIZE
+	NORTH_WEST_RESIZE(12), // SDL_SYSTEM_CURSOR_NW_RESIZE
+	SOUTH_RESIZE(17), // SDL_SYSTEM_CURSOR_S_RESIZE
+	SOUTH_EAST_RESIZE(16), // SDL_SYSTEM_CURSOR_SE_RESIZE
+	SOUTH_WEST_RESIZE(18), // SDL_SYSTEM_CURSOR_SW_RESIZE
+	WEST_RESIZE(19), // SDL_SYSTEM_CURSOR_W_RESIZE
+	NORTH_SOUTH_RESIZE(8), // SDL_SYSTEM_CURSOR_NS_RESIZE
+	EAST_WEST_RESIZE(7), // SDL_SYSTEM_CURSOR_EW_RESIZE
+	NORTH_EAST_SOUTH_WEST_RESIZE(6), // SDL_SYSTEM_CURSOR_NESW_RESIZE
+	NORTH_WEST_SOUTH_EAST_RESIZE(5), // SDL_SYSTEM_CURSOR_NWSE_RESIZE
+	COLUMN_RESIZE(7), // SDL_SYSTEM_CURSOR_EW_RESIZE
+	ROW_RESIZE(8), // SDL_SYSTEM_CURSOR_NS_RESIZE
+	MIDDLE_PANNING(-1),
+	EAST_PANNING(-1),
+	NORTH_PANNING(-1),
+	NORTH_EAST_PANNING(-1),
+	NORTH_WEST_PANNING(-1),
+	SOUTH_PANNING(-1),
+	SOUTH_EAST_PANNING(-1),
+	SOUTH_WEST_PANNING(-1),
+	WEST_PANNING(-1),
+	MOVE(9), // SDL_SYSTEM_CURSOR_MOVE
+	VERTICAL_IBEAM(-1), // VERTICAL_TEXT
+	CELL(-1),
+	CONTEXT_MENU(-1),
+	ALIAS(-1),
+	PROGRESS(4), // SDL_SYSTEM_CURSOR_PROGRESS
+	NO_DROP(10), // SDL_SYSTEM_CURSOR_NOT_ALLOWED
+	COPY(-1),
+	NONE(-1),
+	NOT_ALLOWED(10), // SDL_SYSTEM_CURSOR_NOT_ALLOWED
+	ZOOM_IN(-1),
+	ZOOM_OUT(-1),
+	GRAB(-1),
+	GRABBING(-1),
+	CUSTOM(-1),
+	;
+
+	/**
+	 * The {@code SDL_SystemCursor} id, or {@code -1} if this CEF cursor type
+	 * has no SDL system cursor counterpart.
+	 */
+	public final int sdlCursorId;
+
+	CefCursorType(int sdlCursorId) {
+		this.sdlCursorId = sdlCursorId;
+	}
+
+	public static CefCursorType fromId(int id) {
+		return values()[id];
+	}
+}

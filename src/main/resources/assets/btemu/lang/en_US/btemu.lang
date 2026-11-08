@@ -1,0 +1,15 @@
+tile.btemu.monitor.name=Monitor
+tile.btemu.monitor.desc=A bright LCD screen. Place several together to make a bigger one.
+tile.btemu.iron.monitor.name=Iron Monitor
+tile.btemu.iron.monitor.desc=An old CRT screen. Place several together to make a bigger one.
+tile.btemu.diamond.monitor.name=Diamond Monitor
+tile.btemu.diamond.monitor.desc=A sharp, smooth screen. Place several together to make a bigger one.
+tile.btemu.steel.monitor.name=Steel Monitor
+tile.btemu.steel.monitor.desc=The sharpest, brightest screen. Place several together to make a bigger one.
+tile.btemu.wooden.monitor.name=Stone Monitor
+tile.btemu.wooden.monitor.desc=A fire-powered stone TV. Fuel it through the hatch, and let it cool down when it overheats.
+btemu.firebox=Firebox
+tile.btemu.speaker.name=Speaker
+tile.btemu.speaker.desc=A 16-bit speaker. TVs within 6 blocks use it automatically. Right-click to name it.
+tile.btemu.golden.speaker.name=Golden Speaker
+tile.btemu.golden.speaker.desc=A hi-fi speaker. TVs within 30 blocks use it automatically. Right-click to name it.

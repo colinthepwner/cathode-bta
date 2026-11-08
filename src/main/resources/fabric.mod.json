@@ -1,0 +1,37 @@
+{
+	"schemaVersion": 1,
+	"id": "btemu",
+	"version": "${version}",
+	"name": "Cathode BTA",
+	"description": "Adds buildable monitors and speakers that run retro console games, browse the web and stream video.",
+	"authors": [
+		"colin"
+	],
+	"contact": {
+		"homepage": "",
+		"sources": ""
+	},
+	"license": "MIT",
+	"icon": "assets/btemu/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.btemu.BtEmu"
+		],
+		"client": [
+			"com.btemu.client.BtEmuClient"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=${fabricloader}",
+		"halplibe": ">=${halplibe}",
+		"minecraft": "*",
+		"java": ">=${java}"
+	},
+	"suggests": {
+		"modmenu": ">=${modmenu}"
+	},
+	"mixins": [
+		"btemu.mixins.json"
+	]
+}

@@ -1,0 +1,28 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.btemu.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "LightUpdateMixin",
+    "PlayerHurtMixin",
+    "SlotMixin",
+    "LanguageMixin"
+  ],
+  "client": [
+    "client.PlayerInputMixin",
+    "client.MinecraftKeyboardMixin",
+    "client.InputDeviceKeyboardMixin",
+    "client.HudCrosshairMixin",
+    "client.SoundEngineMixin",
+    "client.ScreenContainerMixin",
+    "client.MouseInputMixin",
+    "client.MinecraftMouseMixin",
+    "client.InputDeviceMouseMixin",
+    "client.WorldRendererMixin",
+    "client.PlayerControllerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
