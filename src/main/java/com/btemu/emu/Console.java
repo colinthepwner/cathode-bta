@@ -4,20 +4,21 @@ import java.util.Locale;
 import java.util.Map;
 
 public enum Console {
-	GAME_BOY("Game Boy", null, Map.of(), false, "gb"),
-	GAME_BOY_COLOR("Game Boy Color", null, Map.of(), false, "gbc"),
-	NES("NES", "fceumm", Map.of(), false, "nes"),
-	SNES("Super Nintendo", "snes9x", Map.of(), false, "sfc", "smc"),
+	GAME_BOY("Game Boy", null, Map.of(), false, 1, "gb"),
+	GAME_BOY_COLOR("Game Boy Color", null, Map.of(), false, 1, "gbc"),
+	NES("NES", "fceumm", Map.of(), false, 2, "nes"),
+	SNES("Super Nintendo", "snes9x", Map.of(), false, 2, "sfc", "smc"),
 	N64("Nintendo 64", "parallel_n64", Map.of(
 
 			"parallel-n64-gfxplugin", "angrylion",
 			"parallel-n64-rspplugin", "cxd4",
 			"parallel-n64-cpucore", "dynamic_recompiler",
 			"parallel-n64-angrylion-multithread", "all threads",
-			"parallel-n64-screensize", "320x240"), true, "z64", "n64", "v64"),
-	GBA("Game Boy Advance", "mgba", Map.of(), false, "gba"),
-	GENESIS("Genesis", "genesis_plus_gx", Map.of(), false, "md", "gen", "smd"),
-	MASTER_SYSTEM("Master System", "genesis_plus_gx", Map.of(), false, "sms");
+			"parallel-n64-screensize", "320x240"), true, 4, "z64", "n64", "v64"),
+
+	GBA("Game Boy Advance", "mgba", Map.of(), false, 1, "gba"),
+	GENESIS("Genesis", "genesis_plus_gx", Map.of(), false, 2, "md", "gen", "smd"),
+	MASTER_SYSTEM("Master System", "genesis_plus_gx", Map.of(), false, 2, "sms");
 
 	public final String name;
 
@@ -26,9 +27,12 @@ public enum Console {
 	public final Map<String, String> options;
 
 	public final boolean dpadIsStick;
+
+	public final int players;
 	final String[] exts;
 
-	Console(String name, String core, Map<String, String> options, boolean dpadIsStick, String... exts) {
+	Console(String name, String core, Map<String, String> options, boolean dpadIsStick, int players, String... exts) {
+		this.players = players;
 		this.name = name;
 		this.core = core;
 		this.options = options;

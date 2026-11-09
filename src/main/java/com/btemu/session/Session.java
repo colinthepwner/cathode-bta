@@ -33,7 +33,10 @@ public final class Session {
 	byte[] romBytes;
 	boolean noteMode;
 	int epoch = 0;
+
 	String controller = "";
+
+	final String[] guests = {"", "", ""};
 	final Lockstep ls = new Lockstep();
 
 	boolean alarm = false;
@@ -53,7 +56,10 @@ public final class Session {
 
 	static final long ALARM_MS = 3200;
 	long bound = 0;
+
 	private long lastStamp = -1;
+
+	private final long[] lastPortStamp = {-1, -1, -1, -1};
 	private double acc = 0;
 	private long lastNs = 0;
 	private final List<long[]> outbox = new ArrayList<>();
@@ -141,6 +147,7 @@ public final class Session {
 		if (bytes != null) {
 			try {
 				ls.gb = com.btemu.emu.Machines.create(name, bytes, saveFile(name));
+				ls.fresh = true;
 			} catch (Exception e) {
 				BtEmu.LOGGER.error("Bad ROM {}", name, e);
 				bytes = null;
@@ -149,15 +156,39 @@ public final class Session {
 		setRom(name, bytes);
 	}
 
+	boolean rebaseWanted;
+
+	boolean needsRebase() {
+		return ls.gb instanceof com.btemu.emu.RetroCore && !ls.fresh;
+	}
+
+	private long lastRebaseMs;
+
+	private void rebase() {
+
+		long now = System.currentTimeMillis();
+		if (now - lastRebaseMs < 10_000) return;
+		lastRebaseMs = now;
+		newEpoch();
+	}
+
 	private void newEpoch() {
 		epoch++;
 		awaitWorker();
 		synchronized (ls) {
+			if (needsRebase()) {
+				try {
+					ls.restore(ls.snapshot(), romBytes, null);
+				} catch (Exception e) {
+					BtEmu.LOGGER.error("Couldn't reload the machine at {} for a resync", pos, e);
+				}
+			}
 			ls.frame = 0;
 			ls.inputs.clear();
 		}
 		bound = delay();
 		lastStamp = -1;
+		java.util.Arrays.fill(lastPortStamp, -1);
 		outbox.clear();
 		acc = 0;
 		lastNs = 0;
@@ -189,6 +220,14 @@ public final class Session {
 		}
 	}
 
+	void autotestPlay(String rom) {
+		awaitWorker();
+		loadCartridge(rom);
+		ls.menu.open = ls.gb == null;
+		newEpoch();
+		broadcastState();
+	}
+
 	void powerOff() {
 		awaitWorker();
 		synchronized (ls) {
@@ -202,6 +241,7 @@ public final class Session {
 		alarm = false;
 		tvHost = "";
 		controller = "";
+		java.util.Arrays.fill(guests, "");
 		candidates.clear();
 		broadcastState();
 		setLight(0);
@@ -269,6 +309,10 @@ public final class Session {
 	void tick(MonitorGroup g) {
 		lastTickMs = System.currentTimeMillis();
 		if (!powered) return;
+		if (rebaseWanted) {
+			rebaseWanted = false;
+			rebase();
+		}
 		dropAbsentController();
 		refreshSpeakers(g);
 		if (alarm) {
@@ -359,8 +403,8 @@ public final class Session {
 				newEpoch();
 				return;
 			} else if (a == MonitorMenu.Action.TV || a == MonitorMenu.Action.WEB || MonitorMenu.appId(a) != 0) {
-				if (!controller.isEmpty()) {
-					tvHost = controller;
+				if (!owner().isEmpty()) {
+					tvHost = owner();
 					tvWeb = a == MonitorMenu.Action.WEB || MonitorMenu.appId(a) != 0;
 					tvApp = MonitorMenu.appId(a);
 					broadcastState();
@@ -441,8 +485,39 @@ public final class Session {
 
 	private int tvPrevMask = 0;
 
+	int portOf(String name) {
+		if (name == null || name.isEmpty()) return -1;
+		if (name.equals(controller)) return 0;
+		for (int i = 0; i < guests.length; i++) if (name.equals(guests[i])) return i + 1;
+		return -1;
+	}
+
+	String owner() {
+		if (!controller.isEmpty()) return controller;
+		for (String g : guests) if (!g.isEmpty()) return g;
+		return "";
+	}
+
+	boolean anyPlayers() {
+		return !owner().isEmpty();
+	}
+
+	int seats() {
+		com.btemu.emu.Machine m = ls.gb;
+		return m == null ? Lockstep.PORTS : Math.max(1, Math.min(Lockstep.PORTS, m.maxPlayers()));
+	}
+
 	void onInput(Player p, int mask) {
-		if (!powered || !p.username.equals(controller)) return;
+		if (!powered) return;
+		int port = portOf(p.username);
+		if (port < 0) return;
+		if (!p.username.equals(owner())) {
+
+			mask &= ~(MonitorMenu.BTN_MENU | MonitorMenu.BTN_VOL_UP | MonitorMenu.BTN_VOL_DOWN | MonitorMenu.BTN_PAUSE);
+			if (!tvHost.isEmpty()) return;
+			stamp(port, mask);
+			return;
+		}
 
 		int pressed = mask & ~prevVolMask;
 		prevVolMask = mask;
@@ -469,13 +544,19 @@ public final class Session {
 			return;
 		}
 		tvPrevMask = mask;
+		stamp(port, mask);
+	}
 
-		long f = Math.max(bound, lastStamp + 1);
-		lastStamp = f;
+	private void stamp(int port, int mask) {
+
+		long f = Math.max(bound, lastPortStamp[port] + 1);
+		lastPortStamp[port] = f;
+		lastStamp = Math.max(lastStamp, f);
+		long k = Lockstep.key(f, port);
 		synchronized (ls) {
-			ls.inputs.put(f, mask);
+			ls.inputs.put(k, mask);
 		}
-		outbox.add(new long[]{f, mask});
+		outbox.add(new long[]{k, mask});
 	}
 
 	void onFocus(Player p, boolean want) {
@@ -487,13 +568,56 @@ public final class Session {
 		if (want) {
 			candidates.put(p.username, System.currentTimeMillis());
 
-			if (controller.equals(p.username)) NetworkHandler.sendToPlayer(p, stateMsg());
+			if (portOf(p.username) >= 0) {
+				NetworkHandler.sendToPlayer(p, stateMsg());
+				return;
+			}
+			if (!anyPlayers()) {
+				setController(p.username);
+				tellSeat(p, 0);
+				return;
+			}
+			if (!takeover) return;
+			int seat = freeSeat();
+			if (seat == 0) {
+				setController(p.username);
+				tellSeat(p, 0);
+			} else if (seat > 0) {
+				guests[seat - 1] = p.username;
+				stamp(seat, 0);
+				broadcastState();
+				tellSeat(p, seat);
+			} else if (seats() == 1) {
 
-			else if (controller.isEmpty() || takeover) setController(p.username);
+				setController(p.username);
+			}
+			else p.sendStatusMessage("All " + seats() + " controllers are taken");
+
 		} else {
 			candidates.remove(p.username);
-			if (p.username.equals(controller)) releaseController(false);
+			int port = portOf(p.username);
+			if (port == 0) releaseController(false);
+			else if (port > 0) leaveSeat(port);
 		}
+	}
+
+	private void tellSeat(Player p, int seat) {
+		if (seats() > 1 || seat > 0) p.sendStatusMessage("You're Player " + (seat + 1));
+	}
+
+	private int freeSeat() {
+		int n = seats();
+		if (controller.isEmpty()) return 0;
+		for (int i = 0; i + 1 < n; i++) if (guests[i].isEmpty()) return i + 1;
+		return -1;
+	}
+
+	void leaveSeat(int port) {
+		String who = guests[port - 1];
+		guests[port - 1] = "";
+		stamp(port, 0);
+		if (!tvHost.isEmpty() && who.equals(tvHost)) exitTv();
+		broadcastState();
 	}
 
 	void onUse(Player p, String cartridge, boolean notes, byte[] savedState) {
@@ -513,11 +637,21 @@ public final class Session {
 			if (t.burnTicks <= 0 && !t.hasFuel()) return;
 		}
 		controller = p.username;
+		java.util.Arrays.fill(guests, "");
 		powerOn(cartridge, notes, savedState);
 	}
 
 	void setController(String name) {
-		if (!tvHost.isEmpty() && !tvHost.equals(name)) {
+		if (!name.isEmpty()) {
+			for (int i = 0; i < guests.length; i++) {
+				if (name.equals(guests[i])) {
+					guests[i] = "";
+					stamp(i + 1, 0);
+				}
+			}
+		}
+		String newOwner = name.isEmpty() ? owner() : name;
+		if (!tvHost.isEmpty() && !tvHost.equals(newOwner)) {
 
 			controller = name;
 			exitTv();
@@ -525,18 +659,9 @@ public final class Session {
 		controller = name;
 		if (!name.isEmpty()) {
 
-			onInputRaw(0);
+			stamp(0, 0);
 		}
 		broadcastState();
-	}
-
-	private void onInputRaw(int mask) {
-		long f = Math.max(bound, lastStamp + 1);
-		lastStamp = f;
-		synchronized (ls) {
-			ls.inputs.put(f, mask);
-		}
-		outbox.add(new long[]{f, mask});
 	}
 
 	void releaseController(boolean toClosest) {
@@ -544,13 +669,13 @@ public final class Session {
 		String old = controller;
 		controller = "";
 
-		onInputRaw(0);
+		stamp(0, 0);
 		if (toClosest) {
 			Player best = null;
 			double bestD = Double.MAX_VALUE;
 			long now = System.currentTimeMillis();
 			for (Player pl : world.players) {
-				if (pl.username.equals(old)) continue;
+				if (pl.username.equals(old) || portOf(pl.username) >= 0) continue;
 				Long t = candidates.get(pl.username);
 				if (t == null || now - t > 2500) continue;
 				double dx = pl.x - pos.x - 0.5, dy = pl.y - pos.y - 0.5, dz = pl.z - pos.z - 0.5;
@@ -559,7 +684,8 @@ public final class Session {
 			}
 			if (best != null) controller = best.username;
 		}
-		if (!tvHost.isEmpty() && !controller.isEmpty() && !controller.equals(tvHost)) exitTv();
+		String own = owner();
+		if (!tvHost.isEmpty() && !own.isEmpty() && !own.equals(tvHost)) exitTv();
 		broadcastState();
 	}
 
@@ -569,15 +695,20 @@ public final class Session {
 			for (Player pl : world.players) if (pl.username.equals(tvHost)) { hostHere = true; break; }
 			if (!hostHere) exitTv();
 		}
-		if (controller.isEmpty()) return;
+		for (int i = 0; i < guests.length; i++) {
+			if (!guests[i].isEmpty() && !nearby(guests[i])) leaveSeat(i + 1);
+		}
+		if (!controller.isEmpty() && !nearby(controller)) releaseController(false);
+	}
+
+	private boolean nearby(String name) {
 		for (Player pl : world.players) {
-			if (pl.username.equals(controller)) {
+			if (pl.username.equals(name)) {
 				double dx = pl.x - pos.x - 0.5, dz = pl.z - pos.z - 0.5;
-				if (dx * dx + dz * dz > 24 * 24) releaseController(false);
-				return;
+				return dx * dx + dz * dz <= 24 * 24;
 			}
 		}
-		releaseController(false);
+		return false;
 	}
 
 	Msgs.State stateMsg() {
@@ -588,6 +719,7 @@ public final class Session {
 		m.rom = rom;
 		m.crc = crc;
 		m.controller = controller;
+		m.guests = guests.clone();
 		m.epoch = epoch;
 		m.alarm = alarm;
 		m.tvHost = tvHost;
@@ -613,6 +745,15 @@ public final class Session {
 			BtEmu.LOGGER.error("Snapshot failed", e);
 			return;
 		}
+
+		List<Player> targets = new ArrayList<>();
+		if (to != null) targets.add(to);
+		else for (Player pl : world.players) {
+			double dx = pl.x - pos.x - 0.5, dy = pl.y - pos.y - 0.5, dz = pl.z - pos.z - 0.5;
+			if (dx * dx + dy * dy + dz * dz <= RADIUS * RADIUS) targets.add(pl);
+		}
+		for (Player pl : targets)
+			com.btemu.net.BulkSend.cancel(pl, q -> q instanceof Msgs.Snapshot s && s.pos.equals(pos));
 		Msgs.chunks(snap, parts -> {
 			for (int i = 0; i < parts.length; i++) {
 				Msgs.Snapshot m = new Msgs.Snapshot();
@@ -621,8 +762,7 @@ public final class Session {
 				m.index = i;
 				m.count = parts.length;
 				m.data = parts[i];
-				if (to != null) NetworkHandler.sendToPlayer(to, m);
-				else NetworkHandler.sendToAllAround(pos.x + 0.5, pos.y + 0.5, pos.z + 0.5, RADIUS, dim(), m);
+				for (Player pl : targets) com.btemu.net.BulkSend.send(pl, m);
 			}
 		});
 	}
@@ -635,8 +775,7 @@ public final class Session {
 			if (ls.skipCoreFrames && ls.gb instanceof com.btemu.emu.RetroCore && Sessions.localSnapshot != null)
 				s = Sessions.localSnapshot.apply(pos);
 			if (s == null) s = ls.snapshot();
-
-			return s.length > 2 << 20 ? null : s;
+			return s;
 		} catch (Exception e) {
 			return null;
 		}

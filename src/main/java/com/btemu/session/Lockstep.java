@@ -20,33 +20,93 @@ public final class Lockstep {
 
 	public boolean skipCoreFrames;
 	public String rom = "";
+
+	public boolean fresh = true;
 	public boolean soundLocked;
 
 	public long frame;
+
 	public int curMask, prevMask;
+
+	public final int[] otherCur = new int[PORTS - 1], otherPrev = new int[PORTS - 1];
+
+	public static final int PORTS = 4;
 
 	public final TreeMap<Long, Integer> inputs = new TreeMap<>();
 
-	public synchronized MonitorMenu.Action step() {
-		Integer m = inputs.remove(frame);
-		if (m != null) curMask = m;
+	public static long key(long frame, int port) {
+		return frame * PORTS + port;
+	}
 
-		while (!inputs.isEmpty() && inputs.firstKey() < frame) curMask = inputs.pollFirstEntry().getValue();
+	private void apply(long key, int mask) {
+		int port = (int) Math.floorMod(key, (long) PORTS);
+		if (port == 0) curMask = mask;
+		else otherCur[port - 1] = mask;
+	}
+
+	public synchronized MonitorMenu.Action step() {
+
+		long end = key(frame + 1, 0);
+		while (!inputs.isEmpty() && inputs.firstKey() < end) {
+			Map.Entry<Long, Integer> e = inputs.pollFirstEntry();
+			apply(e.getKey(), e.getValue());
+		}
 		int pressed = curMask & ~prevMask;
 		prevMask = curMask;
+
+		int anyPressed = pressed;
+		for (int i = 0; i < otherCur.length; i++) {
+			anyPressed |= otherCur[i] & ~otherPrev[i];
+			otherPrev[i] = otherCur[i];
+		}
 		MonitorMenu.Action a = MonitorMenu.Action.NONE;
 		if (gb == null || menu.open) {
-			if (gb != null) gb.setButtons(0);
-			a = menu.step(pressed, gb != null, rom, soundLocked);
-		} else if ((pressed & MonitorMenu.BTN_MENU) != 0) {
+			if (gb != null) clearPads();
+			a = menu.step(anyPressed, gb != null, rom, soundLocked);
+		} else if ((anyPressed & MonitorMenu.BTN_MENU) != 0) {
 			menu.openAt(rom);
-			gb.setButtons(0);
+			clearPads();
 		} else {
 			gb.setButtons(curMask & ~0xF00);
-			if (!skipCoreFrames || !(gb instanceof com.btemu.emu.RetroCore)) gb.runFrame();
+			for (int i = 0; i < otherCur.length; i++) gb.setButtons(i + 1, otherCur[i] & ~0xF00);
+			if (!skipCoreFrames || !(gb instanceof com.btemu.emu.RetroCore)) {
+				gb.runFrame();
+				fresh = false;
+				if (HASH_LOG && frame % 300 == 0) logHash();
+			}
 		}
 		frame++;
 		return a;
+	}
+
+	private static final boolean HASH_LOG = System.getProperty("btemu.hashlog") != null;
+
+	private void logHash() {
+		java.util.zip.CRC32 c = new java.util.zip.CRC32();
+		int[] px = gb.frame();
+		synchronized (px) {
+			for (int v : px) c.update(v);
+		}
+		if (frame % 1500 == 0) {
+
+			try {
+				java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(gb.width(), gb.height(), java.awt.image.BufferedImage.TYPE_INT_RGB);
+				synchronized (px) {
+					img.setRGB(0, 0, gb.width(), gb.height(), px, 0, gb.width());
+				}
+				java.io.File dir = new java.io.File("hashshots");
+				dir.mkdirs();
+				javax.imageio.ImageIO.write(img, "png", new java.io.File(dir, frame + ".png"));
+			} catch (Exception ignored) {
+			}
+		}
+		com.btemu.BtEmu.LOGGER.info("HASH {} frame={} crc={} pads={},{},{},{}", rom, frame, Long.toHexString(c.getValue()),
+				curMask, otherCur[0], otherCur[1], otherCur[2]);
+	}
+
+	private void clearPads() {
+		gb.setButtons(0);
+		for (int i = 0; i < otherCur.length; i++) gb.setButtons(i + 1, 0);
 	}
 
 	public synchronized byte[] snapshot() throws IOException {
@@ -62,6 +122,11 @@ public final class Lockstep {
 			for (Map.Entry<Long, Integer> e : inputs.entrySet()) {
 				o.writeLong(e.getKey());
 				o.writeInt(e.getValue());
+			}
+
+			for (int i = 0; i < otherCur.length; i++) {
+				o.writeInt(otherCur[i]);
+				o.writeInt(otherPrev[i]);
 			}
 		}
 		return bo.toByteArray();
@@ -79,6 +144,7 @@ public final class Lockstep {
 				if (gb != null) gb.close();
 				gb = Machines.create(rom, romBytes, saveFile);
 				gb.loadState(in);
+				fresh = true;
 			} else {
 				if (gb != null) gb.close();
 				gb = null;
@@ -86,6 +152,18 @@ public final class Lockstep {
 			inputs.clear();
 			int n = in.readInt();
 			for (int i = 0; i < n; i++) inputs.put(in.readLong(), in.readInt());
+			java.util.Arrays.fill(otherCur, 0);
+			java.util.Arrays.fill(otherPrev, 0);
+			try {
+				for (int i = 0; i < otherCur.length; i++) {
+					otherCur[i] = in.readInt();
+					otherPrev[i] = in.readInt();
+				}
+			} catch (java.io.EOFException old) {
+
+				java.util.Arrays.fill(otherCur, 0);
+				java.util.Arrays.fill(otherPrev, 0);
+			}
 		}
 	}
 }

@@ -36,6 +36,8 @@ public final class RetroCore implements Machine {
 	private final Console console;
 	private final NativeLibrary lib;
 	private final File dllCopy;
+
+	private File romCopy;
 	private final Map<String, String> options = new HashMap<>();
 
 	private final Map<String, Memory> strings = new HashMap<>();
@@ -46,6 +48,8 @@ public final class RetroCore implements Machine {
 	private int[] front = new int[1];
 	private double fps = 60, sampleRate = 44100;
 	private volatile int buttons;
+
+	private final int[] otherButtons = new int[3];
 	private boolean closed;
 
 	private final float[] ring = new float[48000];
@@ -95,6 +99,7 @@ public final class RetroCore implements Machine {
 				File tmp = new File(dllCopy.getParentFile(), dllCopy.getName() + "-" + romName.replaceAll("[^A-Za-z0-9._-]", "_"));
 				Files.write(tmp.toPath(), rom);
 				tmp.deleteOnExit();
+				romCopy = tmp;
 				gameInfo.setPointer(0, str(tmp.getAbsolutePath()));
 			} else {
 				gameInfo.setPointer(0, str(romName));
@@ -106,7 +111,8 @@ public final class RetroCore implements Machine {
 
 			if ((fn("retro_load_game").invokeInt(new Object[]{gameInfo}) & 0xFF) == 0)
 				throw new IOException(console.name + " core couldn't load " + romName);
-			call("retro_set_controller_port_device", 0, DEVICE_JOYPAD);
+
+			for (int p = 0; p < console.players; p++) call("retro_set_controller_port_device", p, DEVICE_JOYPAD);
 			readAvInfo();
 			warmUp();
 		} catch (Throwable t) {
@@ -162,6 +168,17 @@ public final class RetroCore implements Machine {
 	@Override
 	public void setButtons(int mask) {
 		buttons = mask;
+	}
+
+	@Override
+	public int maxPlayers() {
+		return console.players;
+	}
+
+	@Override
+	public void setButtons(int port, int mask) {
+		if (port == 0) buttons = mask;
+		else if (port < console.players) otherButtons[port - 1] = mask;
 	}
 
 	@Override
@@ -237,6 +254,8 @@ public final class RetroCore implements Machine {
 		} catch (Throwable ignored) {
 		}
 		if (dllCopy != null && !dllCopy.delete()) dllCopy.deleteOnExit();
+
+		if (romCopy != null) romCopy.delete();
 	}
 
 	private byte environment(int cmd, Pointer data) {
@@ -367,8 +386,8 @@ public final class RetroCore implements Machine {
 	}
 
 	private short inputState(int port, int device, int index, int id) {
-		if (port != 0) return 0;
-		int m = buttons;
+		if (port < 0 || port >= console.players) return 0;
+		int m = port == 0 ? buttons : otherButtons[port - 1];
 		if (device == DEVICE_JOYPAD) {
 			if (id == JOYPAD_MASK) {
 				int bits = 0;

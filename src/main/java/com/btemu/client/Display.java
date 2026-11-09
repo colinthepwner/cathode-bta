@@ -48,6 +48,8 @@ final class Display {
 	volatile boolean noteMode;
 	volatile String controller = "";
 
+	volatile String[] guests = {"", "", ""};
+
 	volatile int volume = 7;
 	volatile long volumeShownNs = 0;
 
@@ -206,8 +208,17 @@ final class Display {
 	}
 
 	boolean isMine() {
+		return mySeat() >= 0;
+	}
+
+	int mySeat() {
 		Minecraft mc = Minecraft.getMinecraft();
-		return mc.thePlayer != null && mc.thePlayer.username != null && mc.thePlayer.username.equals(controller);
+		String me = mc.thePlayer == null ? null : mc.thePlayer.username;
+		if (me == null) return -1;
+		if (me.equals(controller)) return 0;
+		String[] g = guests;
+		for (int i = 0; i < g.length; i++) if (me.equals(g[i])) return i + 1;
+		return -1;
 	}
 
 	long offAnimMs() {
@@ -266,6 +277,7 @@ final class Display {
 		roms = m.roms;
 		com.btemu.emu.CoreStore.prefetch(m.roms);
 		controller = m.controller;
+		guests = m.guests;
 		if (m.epoch != epoch) {
 			synchronized (lock) {
 				epoch = m.epoch;
@@ -358,7 +370,7 @@ final class Display {
 				l.menu.tvAllowed = !kind.wooden;
 				l.menu.setRoms(roms);
 				l.restore(pendingSnap, rom.isEmpty() ? null : romBytes, null);
-				for (Map.Entry<Long, Integer> e : early.entrySet()) if (e.getKey() >= l.frame) l.inputs.put(e.getKey(), e.getValue());
+				for (Map.Entry<Long, Integer> e : early.entrySet()) if (e.getKey() >= Lockstep.key(l.frame, 0)) l.inputs.put(e.getKey(), e.getValue());
 				early.clear();
 				if (l.gb instanceof GameBoy g) {
 					NoteSamples.apply(g.apu.notes);
@@ -408,7 +420,10 @@ final class Display {
 
 			net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getMinecraft();
 			MonitorGroup g = GroupCache.get(te);
-			if (mc.thePlayer != null && g.isOrigin(te.tilePos)) {
+
+			Display live = ALL.get(te.tilePos);
+			boolean played = live != null && (!live.controller.isEmpty() || java.util.Arrays.stream(live.guests).anyMatch(n -> !n.isEmpty()));
+			if (mc.thePlayer != null && g.isOrigin(te.tilePos) && played) {
 				double cx = g.cx - mc.thePlayer.x;
 				double cy = g.cy - (mc.thePlayer.y + mc.thePlayer.getHeadHeight());
 				double cz = g.cz - mc.thePlayer.z;
@@ -460,7 +475,8 @@ final class Display {
 		d.audio.volume = top * (float) Math.pow(d.volume / 10f, exp);
 		d.audio.updateListener(g);
 
-		if (!d.ready && d.pendingSnap == null) {
+		boolean arriving = d.snapParts != null || (!d.rom.isEmpty() && d.romBytes == null);
+		if (!d.ready && d.pendingSnap == null && !arriving) {
 			Long asked = LAST_SYNC_ASK.get(d.pos);
 			long now = System.currentTimeMillis();
 			if (asked == null || now - asked > 3000) {

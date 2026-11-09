@@ -79,6 +79,8 @@ public final class Msgs {
 
 		public int volume = 7;
 		public String rom = "", controller = "";
+
+		public String[] guests = {"", "", ""};
 		public long crc;
 		public int epoch;
 		public List<String> roms = new ArrayList<>();
@@ -102,6 +104,7 @@ public final class Msgs {
 			p.writeInt(epoch);
 			p.writeInt(roms.size());
 			for (String r : roms) p.writeString(r);
+			for (String g : guests) p.writeString(g == null ? "" : g);
 		}
 
 		@Override
@@ -121,6 +124,7 @@ public final class Msgs {
 			epoch = p.readInt();
 			int n = p.readInt();
 			for (int i = 0; i < n; i++) roms.add(p.readString());
+			for (int i = 0; i < guests.length; i++) guests[i] = p.readString();
 		}
 
 		@Override

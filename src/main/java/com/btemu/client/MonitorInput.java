@@ -53,6 +53,8 @@ public final class MonitorInput {
 			prev.menuKey = false;
 			prev.sendInput();
 
+			if (System.getProperty("btemu.autotestView") != null)
+				com.btemu.BtEmu.LOGGER.info("AUTOTEST capture handed back {} for {}", prev.pos, d.pos);
 			turniplabs.halplibe.helper.network.NetworkHandler.sendToServer(new com.btemu.net.Msgs.Focus(prev.pos, false));
 		}
 		active = d;
@@ -78,7 +80,11 @@ public final class MonitorInput {
 			d.inputMask = 0;
 			d.menuKey = false;
 			d.sendInput();
-			if (tellServer) turniplabs.halplibe.helper.network.NetworkHandler.sendToServer(new com.btemu.net.Msgs.Focus(d.pos, false));
+			if (tellServer) {
+				if (System.getProperty("btemu.autotestView") != null)
+					com.btemu.BtEmu.LOGGER.info("AUTOTEST released focus", new Exception("why"));
+				turniplabs.halplibe.helper.network.NetworkHandler.sendToServer(new com.btemu.net.Msgs.Focus(d.pos, false));
+			}
 		}
 	}
 

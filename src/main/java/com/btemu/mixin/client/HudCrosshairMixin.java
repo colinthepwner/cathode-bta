@@ -11,6 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class HudCrosshairMixin {
 	@Inject(method = "isVisible", at = @At("HEAD"), cancellable = true)
 	private void btemu$hideWhileFocused(CallbackInfoReturnable<Boolean> cir) {
+		com.btemu.client.SpTest.tick();
 
 		if (MonitorInput.hasMonitor() && !(com.btemu.client.WebInput.active() && !com.btemu.client.WebInput.mouseCaptured()))
 			cir.setReturnValue(false);

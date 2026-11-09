@@ -7,7 +7,8 @@
     "LightUpdateMixin",
     "PlayerHurtMixin",
     "SlotMixin",
-    "LanguageMixin"
+    "LanguageMixin",
+    "NetworkManagerAccessor"
   ],
   "client": [
     "client.PlayerInputMixin",

@@ -11,3 +11,10 @@ run-mpB/
 logs/
 *.zip
 .claude/
+cathode-icon-512.png
+cathode-bta-coop-test.jar
+race-shots/
+run-mpC/
+run-mpD/
+run-sp/
+run-prod/

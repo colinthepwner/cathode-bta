@@ -29,6 +29,10 @@ public class TileEntityMonitor extends TileEntity implements net.minecraft.core.
 
 	public byte[] savedState = null;
 
+	private String stateFile = null;
+
+	private static final int INLINE_MAX = 64 * 1024;
+
 	private net.minecraft.core.item.ItemStack[] firebox = new net.minecraft.core.item.ItemStack[9];
 
 	public int burnTicks = 0;
@@ -171,6 +175,7 @@ public class TileEntityMonitor extends TileEntity implements net.minecraft.core.
 		noteBlocks = tag.getBooleanOrDefault("NoteBlocks", false);
 		volume = tag.getIntegerOrDefault("Volume", 7);
 		savedState = tag.containsKey("State") ? tag.getByteArray("State") : null;
+		stateFile = tag.containsKey("StateFile") ? tag.getString("StateFile") : null;
 		burnTicks = tag.getIntegerOrDefault("Burn", 0);
 		heatTicks = tag.getIntegerOrDefault("Heat", 0);
 		coolTicks = tag.getIntegerOrDefault("Cool", 0);
@@ -211,13 +216,84 @@ public class TileEntityMonitor extends TileEntity implements net.minecraft.core.
 			list.addTag(t);
 		}
 		tag.put("Firebox", list);
+		if (describing) return;
 		byte[] state = worldObj != null && !worldObj.isClientSide ? com.btemu.session.Sessions.persistentState(this) : null;
 		if (state == null) state = savedState;
-		if (state != null && powered) tag.putByteArray("State", state);
+		if (state == null && stateFile != null && powered) {
+
+			tag.putString("StateFile", stateFile);
+			return;
+		}
+		if (state == null || !powered) {
+			deleteStateFile();
+			return;
+		}
+		if (state.length <= INLINE_MAX) {
+			tag.putByteArray("State", state);
+			deleteStateFile();
+			return;
+		}
+		java.io.File f = stateFileFor(true);
+		if (f == null) return;
+		try {
+			java.io.File tmp = new java.io.File(f.getPath() + ".tmp");
+			java.nio.file.Files.write(tmp.toPath(), state);
+			java.nio.file.Files.move(tmp.toPath(), f.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+					java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+			tag.putString("StateFile", f.getName());
+		} catch (java.io.IOException e) {
+			com.btemu.BtEmu.LOGGER.warn("Couldn't save the monitor at {} ({} KB); it will start fresh next time", tilePos, state.length / 1024, e);
+		}
+	}
+
+	private boolean describing;
+
+	public byte[] takeSavedState() {
+		byte[] s = savedState;
+		savedState = null;
+		if (s == null && stateFile != null) {
+			java.io.File f = stateFileFor(false);
+			if (f != null && f.isFile()) {
+				try {
+					s = java.nio.file.Files.readAllBytes(f.toPath());
+				} catch (java.io.IOException e) {
+					com.btemu.BtEmu.LOGGER.warn("Couldn't read the saved state for the monitor at {}", tilePos, e);
+				}
+			}
+		}
+		return s;
+	}
+
+	private java.io.File stateFileFor(boolean creating) {
+		if (worldObj == null || worldObj.isClientSide || worldObj.getLevelStorage() == null) return null;
+		String name = stateFile != null && !creating ? stateFile
+				: "cathode-monitor-" + worldObj.dimension.id + "_" + tilePos.x + "_" + tilePos.y + "_" + tilePos.z;
+
+		java.io.File f = worldObj.getLevelStorage().getDataFile(name.endsWith(".dat") ? name.substring(0, name.length() - 4) : name);
+		if (f != null && creating) {
+			java.io.File dir = f.getParentFile();
+			if (dir != null) dir.mkdirs();
+			stateFile = f.getName();
+		}
+		return f;
+	}
+
+	private void deleteStateFile() {
+		if (stateFile == null) return;
+		java.io.File f = stateFileFor(false);
+		if (f != null) f.delete();
+		stateFile = null;
 	}
 
 	@Override
 	public Packet getDescriptionPacket() {
-		return new PacketTileEntityData(this);
+		CompoundTag tag = new CompoundTag();
+		describing = true;
+		try {
+			writeToNBT(tag);
+		} finally {
+			describing = false;
+		}
+		return new PacketTileEntityData(tag);
 	}
 }

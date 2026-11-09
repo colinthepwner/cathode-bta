@@ -19,6 +19,14 @@ public interface Machine {
 
 	void setButtons(int mask);
 
+	default int maxPlayers() {
+		return 1;
+	}
+
+	default void setButtons(int port, int mask) {
+		if (port == 0) setButtons(mask);
+	}
+
 	void runFrame();
 
 	void saveState(DataOutputStream o) throws IOException;

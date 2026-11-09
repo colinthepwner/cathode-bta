@@ -33,11 +33,19 @@ public final class Sessions {
 		return out;
 	}
 
+	private static long lastPumpNs = 0;
+
 	public static Session get(World w, TilePosc p) {
 		return ALL.get(key(w, p));
 	}
 
 	public static void tick(TileEntityMonitor te) {
+
+		long now = System.nanoTime();
+		if (now - lastPumpNs > 40_000_000L) {
+			lastPumpNs = now;
+			com.btemu.net.BulkSend.pump();
+		}
 		World w = te.worldObj;
 		MonitorGroup g = MonitorGroup.of(w, te.tilePos);
 		if (!g.isOrigin(te.tilePos)) return;
@@ -51,8 +59,7 @@ public final class Sessions {
 			if (s == null && te.powered) {
 				s = new Session(w, new TilePos(te.tilePos.x, te.tilePos.y, te.tilePos.z), kind);
 				ALL.put(k, s);
-				s.powerOn(te.rom, te.noteBlocks, te.savedState);
-				te.savedState = null;
+				s.powerOn(te.rom, te.noteBlocks, te.takeSavedState());
 			}
 			if (s == null) return;
 		}
@@ -108,12 +115,17 @@ public final class Sessions {
 		MonitorGroup g = MonitorGroup.of(w, pos);
 		Session s = ALL.get(key(w, g.origin));
 		if (s == null || !s.powered) return;
-		s.onFocus(p, !p.username.equals(s.controller), true);
+		s.onFocus(p, s.portOf(p.username) < 0, true);
 	}
 
 	public static void onRemoved(World w, TilePosc pos) {
 		Session s = ALL.remove(key(w, pos));
 		if (s != null) s.powerOff();
+
+		if (!w.isClientSide && w.getLevelStorage() != null) {
+			java.io.File f = w.getLevelStorage().getDataFile("cathode-monitor-" + w.dimension.id + "_" + pos.x() + "_" + pos.y() + "_" + pos.z());
+			if (f != null) f.delete();
+		}
 	}
 
 	public static volatile java.util.function.Function<TilePos, byte[]> localSnapshot;
@@ -128,7 +140,8 @@ public final class Sessions {
 			return;
 		}
 		NetworkHandler.sendToPlayer(p, s.stateMsg());
-		s.broadcastSnapshot(p);
+		if (s.needsRebase()) s.rebaseWanted = true;
+		else s.broadcastSnapshot(p);
 	}
 
 	public static void onRomRequest(Player p, long crc) {
@@ -142,12 +155,18 @@ public final class Sessions {
 						m.index = i;
 						m.count = parts.length;
 						m.data = parts[i];
-						NetworkHandler.sendToPlayer(p, m);
+						com.btemu.net.BulkSend.send(p, m);
 					}
 				});
 				return;
 			}
 		}
+	}
+
+	public static void autotestPlay(World w, TilePosc pos, String rom) {
+		MonitorGroup g = MonitorGroup.of(w, pos);
+		Session s = ALL.get(key(w, g.origin));
+		if (s != null && s.powered) s.autotestPlay(rom);
 	}
 
 	public static void onInput(Player p, TilePos pos, int mask) {
